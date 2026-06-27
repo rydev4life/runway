@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1410">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Runway">
+<title>Runway — Safe to Spend</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Archivo:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== HOME SCREEN ===== -->
+  <main id="screen-home" class="screen active">
+
+    <header class="topbar">
+      <span class="topbar-label">RUNWAY</span>
+      <button id="btn-settings" class="icon-btn" aria-label="Settings">⚙</button>
+    </header>
+
+    <section class="hero">
+      <p id="hero-tag" class="hero-tag">steady</p>
+      <div class="hero-number-wrap">
+        <span class="hero-currency">$</span>
+        <span id="hero-number" class="hero-number">0</span>
+      </div>
+      <p class="hero-sub">safe to spend today</p>
+    </section>
+
+    <section class="runway-bar-section">
+      <div class="runway-bar-track">
+        <div id="runway-bar-fill" class="runway-bar-fill"></div>
+      </div>
+      <div class="runway-bar-labels">
+        <span id="runway-days-label">— days to next pay</span>
+        <span id="runway-date-label"></span>
+      </div>
+    </section>
+
+    <section class="quick-actions">
+      <button id="btn-log-spend" class="action-btn action-spend">
+        <span class="action-icon">−</span>
+        <span class="action-text">Log spend</span>
+      </button>
+      <button id="btn-log-tips" class="action-btn action-tips">
+        <span class="action-icon">+</span>
+        <span class="action-text">Log tips</span>
+      </button>
+    </section>
+
+    <section class="till-summary">
+      <div class="till-row">
+        <span class="till-label">Bank balance</span>
+        <span id="till-balance" class="till-value mono">$0.00</span>
+      </div>
+      <div class="till-row">
+        <span class="till-label">Set aside for bills</span>
+        <span id="till-bills" class="till-value mono">$0.00</span>
+      </div>
+      <div class="till-row">
+        <span class="till-label">Owed to people</span>
+        <span id="till-debts" class="till-value mono">$0.00</span>
+      </div>
+      <div class="till-row">
+        <span class="till-label">Buffer (AI-set)</span>
+        <span id="till-buffer" class="till-value mono">$0.00</span>
+      </div>
+      <div class="till-row till-row-note">
+        <span id="buffer-explainer" class="buffer-explainer">Log a few shifts of tips so the buffer can calibrate to you.</span>
+      </div>
+    </section>
+
+    <section class="history-section">
+      <div class="history-header">
+        <span class="history-title">Recent activity</span>
+        <button id="btn-view-all" class="link-btn">View all</button>
+      </div>
+      <ul id="history-list" class="history-list">
+        <li class="history-empty">Nothing logged yet. Add a spend or tip below to get started.</li>
+      </ul>
+    </section>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn nav-active" data-screen="screen-home">
+        <span class="nav-icon">⌂</span><span>Home</span>
+      </button>
+      <button class="nav-btn" data-screen="screen-bills">
+        <span class="nav-icon">▤</span><span>Bills</span>
+      </button>
+      <button class="nav-btn" data-screen="screen-ask">
+        <span class="nav-icon">◈</span><span>Ask</span>
+      </button>
+      <button class="nav-btn" data-screen="screen-history-full">
+        <span class="nav-icon">≣</span><span>History</span>
+      </button>
+    </nav>
+  </main>
+
+  <!-- ===== BILLS / SETUP SCREEN ===== -->
+  <main id="screen-bills" class="screen">
+    <header class="topbar">
+      <button class="icon-btn back-btn" data-back="screen-home" aria-label="Back">←</button>
+      <span class="topbar-label">SETUP</span>
+      <span class="icon-btn" style="visibility:hidden">⚙</span>
+    </header>
+
+    <section class="form-section">
+      <h2 class="section-title">Bank &amp; pay</h2>
+
+      <label class="field-label" for="input-balance">Current bank balance</label>
+      <div class="input-prefix-wrap">
+        <span class="input-prefix">$</span>
+        <input type="number" id="input-balance" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
+      </div>
+
+      <label class="field-label" for="input-next-pay-date">Next paycheck date</label>
+      <input type="date" id="input-next-pay-date" class="field-input">
+
+      <label class="field-label" for="input-next-pay-amount">Expected paycheck amount</label>
+      <div class="input-prefix-wrap">
+        <span class="input-prefix">$</span>
+        <input type="number" id="input-next-pay-amount" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title-row">
+        <h2 class="section-title">Upcoming bills</h2>
+        <button id="btn-add-bill" class="link-btn">+ Add</button>
+      </div>
+      <ul id="bills-list" class="bills-list">
+        <li class="bills-empty">No bills added yet.</li>
+      </ul>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title-row">
+        <h2 class="section-title">Money you owe people</h2>
+        <button id="btn-add-debt" class="link-btn">+ Add</button>
+      </div>
+      <p class="section-hint">Treated like a bill — counted against your balance so it doesn't get spent by accident.</p>
+      <ul id="debts-list" class="bills-list">
+        <li class="bills-empty">No debts added yet.</li>
+      </ul>
+    </section>
+
+    <section class="form-section">
+      <h2 class="section-title">Tip history</h2>
+      <p class="section-hint">Used to calibrate your buffer — the AI leans on your trailing average and how steady it's been.</p>
+      <ul id="tips-history-list" class="bills-list">
+        <li class="bills-empty">No tips logged yet.</li>
+      </ul>
+    </section>
+
+    <button id="btn-save-setup" class="primary-btn">Save</button>
+  </main>
+
+  <!-- ===== ASK SCREEN ===== -->
+  <main id="screen-ask" class="screen">
+    <header class="topbar">
+      <button class="icon-btn back-btn" data-back="screen-home" aria-label="Back">←</button>
+      <span class="topbar-label">ASK</span>
+      <span class="icon-btn" style="visibility:hidden">⚙</span>
+    </header>
+    <section class="ask-section">
+      <p class="ask-intro">Straight answers on what you can spend, based on your numbers — not a budgeting lecture.</p>
+      <div id="ask-answer" class="ask-answer-box">
+        <p class="ask-placeholder">Tap a question below, or type your own.</p>
+      </div>
+      <div class="ask-chip-row">
+        <button class="ask-chip" data-q="Can I afford a $40 dinner tonight?">Can I afford a $40 dinner tonight?</button>
+        <button class="ask-chip" data-q="How am I tracking this week?">How am I tracking this week?</button>
+        <button class="ask-chip" data-q="When can I relax a bit on spending?">When can I relax a bit on spending?</button>
+      </div>
+      <div class="ask-input-row">
+        <input type="text" id="ask-input" class="ask-input" placeholder="Ask about a purchase or your week...">
+        <button id="btn-ask-send" class="ask-send-btn">→</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== FULL HISTORY SCREEN ===== -->
+  <main id="screen-history-full" class="screen">
+    <header class="topbar">
+      <button class="icon-btn back-btn" data-back="screen-home" aria-label="Back">←</button>
+      <span class="topbar-label">HISTORY</span>
+      <span class="icon-btn" style="visibility:hidden">⚙</span>
+    </header>
+    <section class="form-section">
+      <ul id="history-list-full" class="history-list">
+        <li class="history-empty">Nothing logged yet.</li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- ===== SETTINGS SCREEN ===== -->
+  <main id="screen-settings" class="screen">
+    <header class="topbar">
+      <button class="icon-btn back-btn" data-back="screen-home" aria-label="Back">←</button>
+      <span class="topbar-label">SETTINGS</span>
+      <span class="icon-btn" style="visibility:hidden">⚙</span>
+    </header>
+    <section class="form-section">
+      <h2 class="section-title">Backup</h2>
+      <p class="section-hint">Your data lives only on this phone. Export it before clearing browser data or switching phones.</p>
+      <button id="btn-export" class="secondary-btn">Export backup (.json)</button>
+      <label class="secondary-btn file-label" for="import-file">Import backup</label>
+      <input type="file" id="import-file" accept=".json" style="display:none">
+    </section>
+    <section class="form-section">
+      <h2 class="section-title">Reset</h2>
+      <p class="section-hint">Clears all logged spends, tips, balance, and bills. Cannot be undone.</p>
+      <button id="btn-reset" class="danger-btn">Reset all data</button>
+    </section>
+  </main>
+
+  <!-- ===== MODALS ===== -->
+  <div id="modal-overlay" class="modal-overlay">
+
+    <div id="modal-log-spend" class="modal">
+      <h3 class="modal-title">Log a spend</h3>
+      <div class="input-prefix-wrap">
+        <span class="input-prefix">$</span>
+        <input type="number" id="spend-amount" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01" autofocus>
+      </div>
+      <input type="text" id="spend-note" class="field-input" placeholder="What for? (optional)">
+      <div class="modal-actions">
+        <button class="modal-btn modal-cancel" data-close>Cancel</button>
+        <button class="modal-btn modal-confirm" id="confirm-spend">Log it</button>
+      </div>
+    </div>
+
+    <div id="modal-log-tips" class="modal">
+      <h3 class="modal-title">Log tonight's tips</h3>
+      <div class="input-prefix-wrap">
+        <span class="input-prefix">$</span>
+        <input type="number" id="tips-amount" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
+      </div>
+      <p class="modal-hint">This adds to your bank balance and helps the buffer calibrate to your real average.</p>
+      <div class="modal-actions">
+        <button class="modal-btn modal-cancel" data-close>Cancel</button>
+        <button class="modal-btn modal-confirm" id="confirm-tips">Log it</button>
+      </div>
+    </div>
+
+    <div id="modal-add-bill" class="modal">
+      <h3 class="modal-title">Add a bill</h3>
+      <input type="text" id="bill-name" class="field-input" placeholder="Name (e.g. Rent)">
+      <div class="input-prefix-wrap">
+        <span class="input-prefix">$</span>
+        <input type="number" id="bill-amount" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
+      </div>
+      <label class="field-label" for="bill-date">Due date</label>
+      <input type="date" id="bill-date" class="field-input">
+      <div class="modal-actions">
+        <button class="modal-btn modal-cancel" data-close>Cancel</button>
+        <button class="modal-btn modal-confirm" id="confirm-bill">Add bill</button>
+      </div>
+    </div>
+
+    <div id="modal-add-debt" class="modal">
+      <h3 class="modal-title">Add money you owe</h3>
+      <input type="text" id="debt-person" class="field-input" placeholder="Who do you owe? (e.g. Sam)">
+      <div class="input-prefix-wrap">
+        <span class="input-prefix">$</span>
+        <input type="number" id="debt-amount" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
+      </div>
+      <input type="text" id="debt-note" class="field-input" placeholder="What for? (optional)">
+      <label class="field-label" for="debt-date">Date owed (optional)</label>
+      <input type="date" id="debt-date" class="field-input">
+      <div class="modal-actions">
+        <button class="modal-btn modal-cancel" data-close>Cancel</button>
+        <button class="modal-btn modal-confirm" id="confirm-debt">Add debt</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
