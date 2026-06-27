@@ -314,6 +314,15 @@
         <span class="input-prefix">$</span>
         <input type="number" id="spend-amount" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01" autofocus>
       </div>
+      <div class="category-chip-row" id="spend-category-row">
+        <button type="button" class="category-chip" data-category="food" data-emoji="🍔">🍔 Food</button>
+        <button type="button" class="category-chip" data-category="gaming" data-emoji="🎮">🎮 Gaming</button>
+        <button type="button" class="category-chip" data-category="gambling" data-emoji="🎲">🎲 Gambling</button>
+        <button type="button" class="category-chip" data-category="subscriptions" data-emoji="🔁">🔁 Subscriptions</button>
+        <button type="button" class="category-chip" data-category="gas" data-emoji="⛽">⛽ Gas</button>
+        <button type="button" class="category-chip" data-category="misc" data-emoji="🏷️">🏷️ Misc</button>
+      </div>
+      <input type="hidden" id="spend-category">
       <input type="text" id="spend-note" class="field-input" placeholder="What for? (optional)">
       <div class="modal-actions">
         <button class="modal-btn modal-cancel" data-close>Cancel</button>

@@ -1,7 +1,7 @@
 // Bump this version string every time you push an update to GitHub Pages.
 // It's the only thing you need to change to force phones to grab the new
 // files right away instead of serving the old cached version.
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 const CACHE_NAME = 'runway-cache-' + APP_VERSION;
 
 const ASSETS = [

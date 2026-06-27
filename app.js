@@ -345,9 +345,11 @@ function renderHistory(){
       const li = document.createElement('li');
       li.className = 'history-item';
       const isSpend = item.type === 'spend';
+      const emojiPrefix = (isSpend && item.emoji) ? item.emoji + ' ' : '';
+      const label = isSpend ? (item.note || (item.category ? item.category[0].toUpperCase() + item.category.slice(1) : 'Spend')) : 'Tips logged';
       li.innerHTML = `
         <div class="history-left">
-          <span class="history-note">${isSpend ? (item.note || 'Spend') : 'Tips logged'}</span>
+          <span class="history-note">${emojiPrefix}${label}</span>
           <span class="history-date">${new Date(item.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
         </div>
         <span class="history-amount mono ${isSpend?'neg':'pos'}">${isSpend?'−':'+'}$${fmt(item.amount)}</span>
@@ -611,6 +613,8 @@ document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('c
 document.getElementById('btn-log-spend').addEventListener('click', () => {
   document.getElementById('spend-amount').value = '';
   document.getElementById('spend-note').value = '';
+  document.getElementById('spend-category').value = '';
+  document.querySelectorAll('#spend-category-row .category-chip').forEach(c => c.classList.remove('selected'));
   openModal('modal-log-spend');
 });
 document.getElementById('btn-log-tips').addEventListener('click', () => {
@@ -648,11 +652,27 @@ document.getElementById('btn-add-deduction').addEventListener('click', () => {
   openModal('modal-add-deduction');
 });
 
+document.querySelectorAll('#spend-category-row .category-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const alreadySelected = chip.classList.contains('selected');
+    document.querySelectorAll('#spend-category-row .category-chip').forEach(c => c.classList.remove('selected'));
+    if(!alreadySelected){
+      chip.classList.add('selected');
+      document.getElementById('spend-category').value = chip.dataset.category;
+    } else {
+      document.getElementById('spend-category').value = '';
+    }
+  });
+});
+
 document.getElementById('confirm-spend').addEventListener('click', () => {
   const amount = parseFloat(document.getElementById('spend-amount').value);
   if(!amount || amount <= 0) return;
   const note = document.getElementById('spend-note').value.trim();
-  data.spends.push({id: uid(), amount, note, date: todayISO()});
+  const category = document.getElementById('spend-category').value;
+  const selectedChip = document.querySelector('#spend-category-row .category-chip.selected');
+  const emoji = selectedChip ? selectedChip.dataset.emoji : '';
+  data.spends.push({id: uid(), amount, note, category, emoji, date: todayISO()});
   data.balance -= amount;
   saveData();
   render();
