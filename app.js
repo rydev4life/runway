@@ -11,6 +11,7 @@ function loadData(){
     nextPayDate: null,
     nextPayAmount: 0,
     hourlyRate: 0,
+    taxLocation: 'none',
     bills: [],      // {id, name, amount, date}
     debts: [],       // {id, person, amount, note, date}
     tips: [],        // {id, amount, date}
@@ -119,28 +120,92 @@ function totalDebtsOwed(){
   return (data.debts || []).reduce((s,d)=> s + Number(d.amount||0), 0);
 }
 
+// ===== TAX ESTIMATION =====
+// Simplified, approximate deduction model. Annualizes a single pay period's
+// gross pay to estimate a marginal-ish blended rate, then applies it back.
+// This is intentionally rough — meant to sanity-check a real paystub, not
+// replace it. Real payroll uses per-period tables, credits, and exemptions
+// this does not model.
+
+const TAX_PROFILES = {
+  'none':  { label: 'No deductions', combinedRate: 0 },
+
+  // Canada — rough blended federal+provincial rate at typical part-time/
+  // service-job income levels, plus approx CPP (5.95%) + EI (1.64%) already folded in.
+  'CA-ON': { label: 'Ontario',                         combinedRate: 0.22 },
+  'CA-QC': { label: 'Quebec',                          combinedRate: 0.27 },
+  'CA-BC': { label: 'British Columbia',                combinedRate: 0.20 },
+  'CA-AB': { label: 'Alberta',                         combinedRate: 0.20 },
+  'CA-MB': { label: 'Manitoba',                        combinedRate: 0.23 },
+  'CA-SK': { label: 'Saskatchewan',                    combinedRate: 0.22 },
+  'CA-NS': { label: 'Nova Scotia',                     combinedRate: 0.24 },
+  'CA-NB': { label: 'New Brunswick',                   combinedRate: 0.23 },
+  'CA-NL': { label: 'Newfoundland and Labrador',       combinedRate: 0.23 },
+  'CA-PE': { label: 'Prince Edward Island',            combinedRate: 0.23 },
+
+  // US — rough blended federal + state + FICA (7.65%) at typical hourly income.
+  'US-CA': { label: 'California',                      combinedRate: 0.22 },
+  'US-NY': { label: 'New York',                        combinedRate: 0.23 },
+  'US-TX': { label: 'Texas',                           combinedRate: 0.16 },
+  'US-FL': { label: 'Florida',                         combinedRate: 0.16 },
+  'US-WA': { label: 'Washington',                      combinedRate: 0.16 }
+};
+
+function getTaxProfile(){
+  const key = data.taxLocation || 'none';
+  return TAX_PROFILES[key] || TAX_PROFILES['none'];
+}
+
+function applyDeductions(gross){
+  const profile = getTaxProfile();
+  const deductions = gross * profile.combinedRate;
+  return {
+    gross: gross,
+    deductions: deductions,
+    net: gross - deductions,
+    rate: profile.combinedRate,
+    label: profile.label
+  };
+}
+
 // Expected gross pay for shifts falling within [start, end] inclusive,
-// based on logged hours x your set hourly rate.
+// based on logged hours x your set hourly rate. Also returns expected net
+// pay after applying your selected tax location's estimated deduction rate.
 function expectedPayForPeriod(start, end){
   const rate = Number(data.hourlyRate || 0);
   const shifts = (data.shifts || []).filter(s => s.date >= start && s.date <= end);
   const totalHours = shifts.reduce((sum, s) => sum + Number(s.hours || 0), 0);
-  return {expected: totalHours * rate, totalHours, shiftCount: shifts.length};
+  const gross = totalHours * rate;
+  const deductionInfo = applyDeductions(gross);
+  return {
+    expectedGross: gross,
+    expectedNet: deductionInfo.net,
+    deductions: deductionInfo.deductions,
+    taxRate: deductionInfo.rate,
+    taxLabel: deductionInfo.label,
+    totalHours,
+    shiftCount: shifts.length
+  };
 }
 
 // Compares a logged paystub's actual amount against what your logged shifts
-// say you should have earned for that same period.
+// say you should have earned (net of estimated deductions) for that period.
 function comparePaystub(paystub){
   const calc = expectedPayForPeriod(paystub.periodStart, paystub.periodEnd);
-  const diff = Number(paystub.actualPay) - calc.expected;
+  const diff = Number(paystub.actualPay) - calc.expectedNet;
   return {
-    expected: calc.expected,
+    expectedGross: calc.expectedGross,
+    expectedNet: calc.expectedNet,
+    deductions: calc.deductions,
+    taxLabel: calc.taxLabel,
     actual: Number(paystub.actualPay),
     diff: diff,
     totalHours: calc.totalHours,
     shiftCount: calc.shiftCount
   };
 }
+
+
 
 function calcSafeToSpend(){
   const billsOwed = billsBeforePayday();
@@ -335,13 +400,21 @@ function renderShiftsList(){
   }
   const sorted = [...shifts].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   const rate = Number(data.hourlyRate || 0);
+  const profile = getTaxProfile();
   sorted.slice(0,15).forEach(shift => {
     const li = document.createElement('li');
     li.className = 'history-item';
-    const pay = Number(shift.hours||0) * rate;
+    const gross = Number(shift.hours||0) * rate;
+    const net = gross * (1 - profile.combinedRate);
+    let payLabel = '';
+    if(rate > 0){
+      payLabel = profile.combinedRate > 0
+        ? ` · $${fmt(gross)} gross / $${fmt(net)} net`
+        : ` · $${fmt(gross)}`;
+    }
     li.innerHTML = `
       <div class="history-left">
-        <span class="history-note">${shift.hours}h${rate > 0 ? ' · $' + fmt(pay) : ''}</span>
+        <span class="history-note">${shift.hours}h${payLabel}</span>
         <span class="history-date">${shift.date ? new Date(shift.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No date'}</span>
       </div>
       <button class="icon-btn" data-remove-shift="${shift.id}" style="font-size:16px;margin-left:6px;">✕</button>
@@ -384,9 +457,12 @@ function renderPaystubsList(){
       diffClass = 'pos';
     }
     const periodLabel = `${new Date(stub.periodStart+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}–${new Date(stub.periodEnd+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+    const expectedLine = result.deductions > 0
+      ? `${result.totalHours}h logged · expected net $${fmt(result.expectedNet)} (gross $${fmt(result.expectedGross)} − ${result.taxLabel} est. $${fmt(result.deductions)})`
+      : `${result.totalHours}h logged, expected $${fmt(result.expectedNet)}`;
     li.innerHTML = `
       <div class="history-left">
-        <span class="history-note">${periodLabel} · ${result.totalHours}h logged, expected $${fmt(result.expected)}</span>
+        <span class="history-note">${periodLabel} · ${expectedLine}</span>
         <span class="history-date">Paid $${fmt(result.actual)}</span>
       </div>
       <span class="history-amount mono ${diffClass}">${diffLabel}</span>
@@ -585,6 +661,7 @@ document.getElementById('btn-save-setup').addEventListener('click', () => {
 // ===== PAY SCREEN =====
 function fillPayScreen(){
   document.getElementById('input-hourly-rate').value = data.hourlyRate || '';
+  document.getElementById('input-tax-location').value = data.taxLocation || 'none';
   renderShiftsList();
   renderPaystubsList();
 }
@@ -592,8 +669,10 @@ document.querySelector('[data-screen="screen-pay"]').addEventListener('click', f
 
 document.getElementById('btn-save-rate').addEventListener('click', () => {
   data.hourlyRate = parseFloat(document.getElementById('input-hourly-rate').value) || 0;
+  data.taxLocation = document.getElementById('input-tax-location').value || 'none';
   saveData();
   renderShiftsList();
+  renderPaystubsList();
 });
 
 // ===== ASK SCREEN =====

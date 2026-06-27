@@ -67,7 +67,8 @@ input{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22px 0 8px;
+  padding: calc(22px + env(safe-area-inset-top)) 0 8px;
+  min-height: 56px;
 }
 .topbar-label{
   font-family: var(--display);
@@ -79,13 +80,14 @@ input{
 .icon-btn{
   font-size: 20px;
   color: var(--text-dim);
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: -4px;
 }
-.back-btn{ font-size: 22px; }
+.back-btn{ font-size: 24px; }
 
 /* ---- Hero ---- */
 .hero{

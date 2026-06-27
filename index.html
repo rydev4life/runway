@@ -183,6 +183,32 @@
         <span class="input-prefix">$</span>
         <input type="number" id="input-hourly-rate" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
       </div>
+
+      <label class="field-label" for="input-tax-location">Tax location</label>
+      <select id="input-tax-location" class="field-input">
+        <option value="none">No deductions (gross pay only)</option>
+        <optgroup label="Canada">
+          <option value="CA-ON">Ontario</option>
+          <option value="CA-QC">Quebec</option>
+          <option value="CA-BC">British Columbia</option>
+          <option value="CA-AB">Alberta</option>
+          <option value="CA-MB">Manitoba</option>
+          <option value="CA-SK">Saskatchewan</option>
+          <option value="CA-NS">Nova Scotia</option>
+          <option value="CA-NB">New Brunswick</option>
+          <option value="CA-NL">Newfoundland and Labrador</option>
+          <option value="CA-PE">Prince Edward Island</option>
+        </optgroup>
+        <optgroup label="United States">
+          <option value="US-CA">California</option>
+          <option value="US-NY">New York</option>
+          <option value="US-TX">Texas (no state income tax)</option>
+          <option value="US-FL">Florida (no state income tax)</option>
+          <option value="US-WA">Washington (no state income tax)</option>
+        </optgroup>
+      </select>
+      <p class="section-hint" id="tax-disclaimer">This is a rough estimate using simplified brackets — not a substitute for your actual paystub or a real tax tool. It's here to sanity-check, not to file with.</p>
+
       <button id="btn-save-rate" class="secondary-btn">Save rate</button>
     </section>
 
