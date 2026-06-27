@@ -10,10 +10,13 @@ function loadData(){
     balance: 0,
     nextPayDate: null,
     nextPayAmount: 0,
+    hourlyRate: 0,
     bills: [],      // {id, name, amount, date}
     debts: [],       // {id, person, amount, note, date}
     tips: [],        // {id, amount, date}
-    spends: []       // {id, amount, note, date}
+    spends: [],      // {id, amount, note, date}
+    shifts: [],      // {id, date, hours}
+    paystubs: []     // {id, periodStart, periodEnd, actualPay, date}
   };
 }
 
@@ -114,6 +117,29 @@ function calcDaysToPayday(){
 // already-spoken-for money, same as a bill, since it's not really yours to spend)
 function totalDebtsOwed(){
   return (data.debts || []).reduce((s,d)=> s + Number(d.amount||0), 0);
+}
+
+// Expected gross pay for shifts falling within [start, end] inclusive,
+// based on logged hours x your set hourly rate.
+function expectedPayForPeriod(start, end){
+  const rate = Number(data.hourlyRate || 0);
+  const shifts = (data.shifts || []).filter(s => s.date >= start && s.date <= end);
+  const totalHours = shifts.reduce((sum, s) => sum + Number(s.hours || 0), 0);
+  return {expected: totalHours * rate, totalHours, shiftCount: shifts.length};
+}
+
+// Compares a logged paystub's actual amount against what your logged shifts
+// say you should have earned for that same period.
+function comparePaystub(paystub){
+  const calc = expectedPayForPeriod(paystub.periodStart, paystub.periodEnd);
+  const diff = Number(paystub.actualPay) - calc.expected;
+  return {
+    expected: calc.expected,
+    actual: Number(paystub.actualPay),
+    diff: diff,
+    totalHours: calc.totalHours,
+    shiftCount: calc.shiftCount
+  };
 }
 
 function calcSafeToSpend(){
@@ -298,6 +324,85 @@ function renderDebtsList(){
   });
 }
 
+function renderShiftsList(){
+  const el = document.getElementById('shifts-list');
+  if(!el) return;
+  el.innerHTML = '';
+  const shifts = data.shifts || [];
+  if(shifts.length === 0){
+    el.innerHTML = '<li class="bills-empty">No shifts logged yet.</li>';
+    return;
+  }
+  const sorted = [...shifts].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  const rate = Number(data.hourlyRate || 0);
+  sorted.slice(0,15).forEach(shift => {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    const pay = Number(shift.hours||0) * rate;
+    li.innerHTML = `
+      <div class="history-left">
+        <span class="history-note">${shift.hours}h${rate > 0 ? ' · $' + fmt(pay) : ''}</span>
+        <span class="history-date">${shift.date ? new Date(shift.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No date'}</span>
+      </div>
+      <button class="icon-btn" data-remove-shift="${shift.id}" style="font-size:16px;margin-left:6px;">✕</button>
+    `;
+    el.appendChild(li);
+  });
+  el.querySelectorAll('[data-remove-shift]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      data.shifts = (data.shifts||[]).filter(s => s.id !== btn.dataset.removeShift);
+      saveData();
+      renderShiftsList();
+    });
+  });
+}
+
+function renderPaystubsList(){
+  const el = document.getElementById('paystubs-list');
+  if(!el) return;
+  el.innerHTML = '';
+  const stubs = data.paystubs || [];
+  if(stubs.length === 0){
+    el.innerHTML = '<li class="bills-empty">No paystubs checked yet.</li>';
+    return;
+  }
+  const sorted = [...stubs].sort((a,b)=> (b.periodEnd||'').localeCompare(a.periodEnd||''));
+  sorted.forEach(stub => {
+    const result = comparePaystub(stub);
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    const diffAbs = Math.abs(result.diff);
+    let diffLabel, diffClass;
+    if(diffAbs < 1){
+      diffLabel = 'Matches';
+      diffClass = 'pos';
+    } else if(result.diff < 0){
+      diffLabel = `Short $${fmt(diffAbs)}`;
+      diffClass = 'neg';
+    } else {
+      diffLabel = `Over $${fmt(diffAbs)}`;
+      diffClass = 'pos';
+    }
+    const periodLabel = `${new Date(stub.periodStart+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}–${new Date(stub.periodEnd+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+    li.innerHTML = `
+      <div class="history-left">
+        <span class="history-note">${periodLabel} · ${result.totalHours}h logged, expected $${fmt(result.expected)}</span>
+        <span class="history-date">Paid $${fmt(result.actual)}</span>
+      </div>
+      <span class="history-amount mono ${diffClass}">${diffLabel}</span>
+      <button class="icon-btn" data-remove-stub="${stub.id}" style="font-size:16px;margin-left:6px;">✕</button>
+    `;
+    el.appendChild(li);
+  });
+  el.querySelectorAll('[data-remove-stub]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      data.paystubs = (data.paystubs||[]).filter(s => s.id !== btn.dataset.removeStub);
+      saveData();
+      renderPaystubsList();
+    });
+  });
+}
+
 function renderTipsHistory(){
   const el = document.getElementById('tips-history-list');
   el.innerHTML = '';
@@ -322,12 +427,15 @@ function renderTipsHistory(){
 
 // ===== NAVIGATION =====
 function showScreen(id){
+  window.scrollTo(0,0);
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('nav-active', b.dataset.screen === id);
   });
-  window.scrollTo(0,0);
+  // Second scroll reset on next frame as a safety net for iOS Safari,
+  // which can otherwise ignore scrollTo when it fires alongside a display swap.
+  requestAnimationFrame(() => window.scrollTo(0,0));
 }
 
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -374,6 +482,17 @@ document.getElementById('btn-add-debt').addEventListener('click', () => {
   document.getElementById('debt-note').value = '';
   document.getElementById('debt-date').value = '';
   openModal('modal-add-debt');
+});
+document.getElementById('btn-add-shift').addEventListener('click', () => {
+  document.getElementById('shift-date').value = todayISO();
+  document.getElementById('shift-hours').value = '';
+  openModal('modal-add-shift');
+});
+document.getElementById('btn-add-paystub').addEventListener('click', () => {
+  document.getElementById('paystub-start').value = '';
+  document.getElementById('paystub-end').value = '';
+  document.getElementById('paystub-amount').value = '';
+  openModal('modal-add-paystub');
 });
 
 document.getElementById('confirm-spend').addEventListener('click', () => {
@@ -423,6 +542,29 @@ document.getElementById('confirm-debt').addEventListener('click', () => {
   closeModal();
 });
 
+document.getElementById('confirm-shift').addEventListener('click', () => {
+  const date = document.getElementById('shift-date').value || todayISO();
+  const hours = parseFloat(document.getElementById('shift-hours').value);
+  if(!hours || hours <= 0) return;
+  data.shifts = data.shifts || [];
+  data.shifts.push({id: uid(), date, hours});
+  saveData();
+  renderShiftsList();
+  closeModal();
+});
+
+document.getElementById('confirm-paystub').addEventListener('click', () => {
+  const periodStart = document.getElementById('paystub-start').value;
+  const periodEnd = document.getElementById('paystub-end').value;
+  const actualPay = parseFloat(document.getElementById('paystub-amount').value);
+  if(!periodStart || !periodEnd || actualPay === undefined || isNaN(actualPay)) return;
+  data.paystubs = data.paystubs || [];
+  data.paystubs.push({id: uid(), periodStart, periodEnd, actualPay, date: todayISO()});
+  saveData();
+  renderPaystubsList();
+  closeModal();
+});
+
 // ===== SETUP / BILLS SCREEN =====
 function fillSetupForm(){
   document.getElementById('input-balance').value = data.balance || '';
@@ -438,6 +580,20 @@ document.getElementById('btn-save-setup').addEventListener('click', () => {
   saveData();
   render();
   showScreen('screen-home');
+});
+
+// ===== PAY SCREEN =====
+function fillPayScreen(){
+  document.getElementById('input-hourly-rate').value = data.hourlyRate || '';
+  renderShiftsList();
+  renderPaystubsList();
+}
+document.querySelector('[data-screen="screen-pay"]').addEventListener('click', fillPayScreen);
+
+document.getElementById('btn-save-rate').addEventListener('click', () => {
+  data.hourlyRate = parseFloat(document.getElementById('input-hourly-rate').value) || 0;
+  saveData();
+  renderShiftsList();
 });
 
 // ===== ASK SCREEN =====
