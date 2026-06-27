@@ -79,6 +79,22 @@
       </div>
     </section>
 
+    <section class="chart-section">
+      <div class="history-header">
+        <span class="history-title">Spending breakdown</span>
+        <div class="chart-range-toggle">
+          <button class="range-btn range-active" data-range="7">7d</button>
+          <button class="range-btn" data-range="30">30d</button>
+          <button class="range-btn" data-range="period">Pay period</button>
+        </div>
+      </div>
+      <div id="chart-wrap" class="chart-wrap">
+        <div id="chart-empty" class="chart-empty">No categorized spends in this range yet.</div>
+        <svg id="chart-donut" viewBox="0 0 160 160" class="chart-donut" style="display:none;"></svg>
+        <ul id="chart-legend" class="chart-legend"></ul>
+      </div>
+    </section>
+
     <section class="history-section">
       <div class="history-header">
         <span class="history-title">Recent activity</span>

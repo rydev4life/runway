@@ -322,7 +322,116 @@ function render(){
   renderBillsList();
   renderDebtsList();
   renderTipsHistory();
+  renderSpendingChart();
 }
+
+// ===== SPENDING BREAKDOWN CHART =====
+const CATEGORY_COLORS = {
+  food:          { color: '#FF8A3D', label: 'Food' },
+  gaming:        { color: '#2FE0E8', label: 'Gaming' },
+  gambling:      { color: '#FF3D81', label: 'Gambling' },
+  subscriptions: { color: '#7B6CF6', label: 'Subscriptions' },
+  gas:           { color: '#F6C445', label: 'Gas' },
+  misc:          { color: '#A89AA0', label: 'Misc' },
+  uncategorized: { color: '#D8CFC8', label: 'Uncategorized' }
+};
+
+let currentChartRange = '7';
+
+function getChartRangeSpends(){
+  let cutoff = null;
+  if(currentChartRange === '7'){
+    const d = new Date(); d.setDate(d.getDate() - 7);
+    cutoff = d.toISOString().slice(0,10);
+  } else if(currentChartRange === '30'){
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    cutoff = d.toISOString().slice(0,10);
+  } else if(currentChartRange === 'period'){
+    // Pay period = since the last logged paystub's period end, or last 14 days if none
+    const stubs = (data.paystubs || []).slice().sort((a,b)=> (b.periodEnd||'').localeCompare(a.periodEnd||''));
+    if(stubs.length > 0){
+      cutoff = stubs[0].periodEnd;
+    } else {
+      const d = new Date(); d.setDate(d.getDate() - 14);
+      cutoff = d.toISOString().slice(0,10);
+    }
+  }
+  return (data.spends || []).filter(s => !cutoff || s.date >= cutoff);
+}
+
+function groupSpendsByCategory(spends){
+  const totals = {};
+  spends.forEach(s => {
+    const key = s.category && CATEGORY_COLORS[s.category] ? s.category : 'uncategorized';
+    totals[key] = (totals[key] || 0) + Number(s.amount || 0);
+  });
+  return Object.entries(totals)
+    .map(([key, total]) => ({ key, total, ...CATEGORY_COLORS[key] }))
+    .sort((a,b) => b.total - a.total);
+}
+
+function buildDonutSVG(groups, total){
+  const cx = 80, cy = 80, r = 60, strokeWidth = 22;
+  const circumference = 2 * Math.PI * r;
+  let offset = 0;
+  let paths = '';
+  groups.forEach(g => {
+    const fraction = g.total / total;
+    const dash = fraction * circumference;
+    paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${g.color}" stroke-width="${strokeWidth}"
+      stroke-dasharray="${dash} ${circumference - dash}" stroke-dashoffset="${-offset}"
+      transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
+    offset += dash;
+  });
+  return paths;
+}
+
+function renderSpendingChart(){
+  const wrapEl = document.getElementById('chart-wrap');
+  if(!wrapEl) return;
+  const emptyEl = document.getElementById('chart-empty');
+  const svgEl = document.getElementById('chart-donut');
+  const legendEl = document.getElementById('chart-legend');
+
+  const spends = getChartRangeSpends();
+  const groups = groupSpendsByCategory(spends);
+  const total = groups.reduce((s,g)=> s + g.total, 0);
+
+  if(groups.length === 0 || total <= 0){
+    emptyEl.style.display = 'block';
+    svgEl.style.display = 'none';
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  svgEl.style.display = 'block';
+  svgEl.innerHTML = buildDonutSVG(groups, total);
+
+  legendEl.innerHTML = '';
+  groups.forEach(g => {
+    const pct = Math.round((g.total / total) * 100);
+    const li = document.createElement('li');
+    li.className = 'chart-legend-item';
+    li.innerHTML = `
+      <span class="chart-legend-left">
+        <span class="chart-legend-dot" style="background:${g.color}"></span>
+        ${g.label} · ${pct}%
+      </span>
+      <span class="chart-legend-value">$${fmt(g.total)}</span>
+    `;
+    legendEl.appendChild(li);
+  });
+}
+
+document.querySelectorAll('.range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('range-active'));
+    btn.classList.add('range-active');
+    currentChartRange = btn.dataset.range;
+    renderSpendingChart();
+  });
+});
 
 function combinedActivity(){
   const spends = data.spends.map(s => ({...s, type:'spend'}));
