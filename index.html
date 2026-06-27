@@ -214,6 +214,17 @@
 
     <section class="form-section">
       <div class="section-title-row">
+        <h2 class="section-title">Other deductions</h2>
+        <button id="btn-add-deduction" class="link-btn">+ Add</button>
+      </div>
+      <p class="section-hint">Things like a pension contribution or staff meal deduction — anything taken off your pay besides tax. Pension as % of pay, meals usually as a flat amount per shift.</p>
+      <ul id="deductions-list" class="bills-list">
+        <li class="bills-empty">No other deductions added yet.</li>
+      </ul>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title-row">
         <h2 class="section-title">Shifts worked</h2>
         <button id="btn-add-shift" class="link-btn">+ Add</button>
       </div>
@@ -380,6 +391,22 @@
       <div class="modal-actions">
         <button class="modal-btn modal-cancel" data-close>Cancel</button>
         <button class="modal-btn modal-confirm" id="confirm-paystub">Compare</button>
+      </div>
+    </div>
+
+    <div id="modal-add-deduction" class="modal">
+      <h3 class="modal-title">Add a deduction</h3>
+      <input type="text" id="deduction-label" class="field-input" placeholder="Name (e.g. Pension, Staff meal)">
+      <label class="field-label" for="deduction-type">Type</label>
+      <select id="deduction-type" class="field-input">
+        <option value="percent">% of gross pay (e.g. pension)</option>
+        <option value="flat">Flat amount per shift (e.g. meal deduction)</option>
+      </select>
+      <label class="field-label" for="deduction-amount">Amount</label>
+      <input type="number" id="deduction-amount" class="field-input" inputmode="decimal" placeholder="e.g. 5 for 5% or 5.00 for $5.00" step="0.01">
+      <div class="modal-actions">
+        <button class="modal-btn modal-cancel" data-close>Cancel</button>
+        <button class="modal-btn modal-confirm" id="confirm-deduction">Add deduction</button>
       </div>
     </div>
 

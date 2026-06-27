@@ -12,6 +12,7 @@ function loadData(){
     nextPayAmount: 0,
     hourlyRate: 0,
     taxLocation: 'none',
+    extraDeductions: [],  // {id, label, type: 'percent'|'flat', amount}
     bills: [],      // {id, name, amount, date}
     debts: [],       // {id, person, amount, note, date}
     tips: [],        // {id, amount, date}
@@ -22,7 +23,12 @@ function loadData(){
 }
 
 function saveData(){
-  localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  }catch(err){
+    alert('Could not save your data. If you\'re in Private Browsing mode, switch to a regular tab — private mode blocks saved data.');
+    throw err;
+  }
 }
 
 let data = loadData();
@@ -121,34 +127,32 @@ function totalDebtsOwed(){
 }
 
 // ===== TAX ESTIMATION =====
-// Simplified, approximate deduction model. Annualizes a single pay period's
-// gross pay to estimate a marginal-ish blended rate, then applies it back.
-// This is intentionally rough — meant to sanity-check a real paystub, not
-// replace it. Real payroll uses per-period tables, credits, and exemptions
-// this does not model.
+// Simplified, approximate deduction model. This is intentionally rough —
+// meant to sanity-check a real paystub, not replace it. Real payroll uses
+// per-period tables, credits, and exemptions this does not model.
 
 const TAX_PROFILES = {
-  'none':  { label: 'No deductions', combinedRate: 0 },
+  'none':  { label: 'No deductions', incomeTaxRate: 0, statutoryRate: 0, statutoryLabel: '' },
 
-  // Canada — rough blended federal+provincial rate at typical part-time/
-  // service-job income levels, plus approx CPP (5.95%) + EI (1.64%) already folded in.
-  'CA-ON': { label: 'Ontario',                         combinedRate: 0.22 },
-  'CA-QC': { label: 'Quebec',                          combinedRate: 0.27 },
-  'CA-BC': { label: 'British Columbia',                combinedRate: 0.20 },
-  'CA-AB': { label: 'Alberta',                         combinedRate: 0.20 },
-  'CA-MB': { label: 'Manitoba',                        combinedRate: 0.23 },
-  'CA-SK': { label: 'Saskatchewan',                    combinedRate: 0.22 },
-  'CA-NS': { label: 'Nova Scotia',                     combinedRate: 0.24 },
-  'CA-NB': { label: 'New Brunswick',                   combinedRate: 0.23 },
-  'CA-NL': { label: 'Newfoundland and Labrador',       combinedRate: 0.23 },
-  'CA-PE': { label: 'Prince Edward Island',            combinedRate: 0.23 },
+  // Canada — rough blended federal+provincial income tax rate at typical
+  // part-time/service-job income levels. CPP + EI shown separately below.
+  'CA-ON': { label: 'Ontario',                   incomeTaxRate: 0.16, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-QC': { label: 'Quebec',                    incomeTaxRate: 0.20, statutoryRate: 0.0935, statutoryLabel: 'QPP + EI + QPIP' },
+  'CA-BC': { label: 'British Columbia',          incomeTaxRate: 0.14, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-AB': { label: 'Alberta',                   incomeTaxRate: 0.14, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-MB': { label: 'Manitoba',                  incomeTaxRate: 0.17, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-SK': { label: 'Saskatchewan',              incomeTaxRate: 0.16, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-NS': { label: 'Nova Scotia',               incomeTaxRate: 0.18, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-NB': { label: 'New Brunswick',             incomeTaxRate: 0.17, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-NL': { label: 'Newfoundland and Labrador', incomeTaxRate: 0.17, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
+  'CA-PE': { label: 'Prince Edward Island',      incomeTaxRate: 0.17, statutoryRate: 0.0759, statutoryLabel: 'CPP + EI' },
 
-  // US — rough blended federal + state + FICA (7.65%) at typical hourly income.
-  'US-CA': { label: 'California',                      combinedRate: 0.22 },
-  'US-NY': { label: 'New York',                        combinedRate: 0.23 },
-  'US-TX': { label: 'Texas',                           combinedRate: 0.16 },
-  'US-FL': { label: 'Florida',                         combinedRate: 0.16 },
-  'US-WA': { label: 'Washington',                      combinedRate: 0.16 }
+  // US — rough blended federal + state income tax rate. FICA shown separately.
+  'US-CA': { label: 'California',  incomeTaxRate: 0.145, statutoryRate: 0.0765, statutoryLabel: 'FICA (Social Security + Medicare)' },
+  'US-NY': { label: 'New York',    incomeTaxRate: 0.155, statutoryRate: 0.0765, statutoryLabel: 'FICA (Social Security + Medicare)' },
+  'US-TX': { label: 'Texas',       incomeTaxRate: 0.085, statutoryRate: 0.0765, statutoryLabel: 'FICA (Social Security + Medicare)' },
+  'US-FL': { label: 'Florida',     incomeTaxRate: 0.085, statutoryRate: 0.0765, statutoryLabel: 'FICA (Social Security + Medicare)' },
+  'US-WA': { label: 'Washington',  incomeTaxRate: 0.085, statutoryRate: 0.0765, statutoryLabel: 'FICA (Social Security + Medicare)' }
 };
 
 function getTaxProfile(){
@@ -156,32 +160,58 @@ function getTaxProfile(){
   return TAX_PROFILES[key] || TAX_PROFILES['none'];
 }
 
-function applyDeductions(gross){
+// Extra deductions beyond tax/CPP/EI — e.g. workplace pension contribution
+// (percentage of gross) and staff meal deduction (flat amount per shift).
+// Stored on data.extraDeductions = [{id, label, type: 'percent'|'flat', amount}]
+function calcExtraDeductions(gross, shiftCount){
+  const list = data.extraDeductions || [];
+  return list.map(d => {
+    const value = d.type === 'percent'
+      ? gross * (Number(d.amount) / 100)
+      : Number(d.amount) * Math.max(1, shiftCount || 1);
+    return { label: d.label, value };
+  });
+}
+
+function applyDeductions(gross, shiftCount){
   const profile = getTaxProfile();
-  const deductions = gross * profile.combinedRate;
+  const incomeTax = gross * profile.incomeTaxRate;
+  const statutory = gross * profile.statutoryRate;
+  const extras = calcExtraDeductions(gross, shiftCount);
+  const extrasTotal = extras.reduce((s,e)=> s + e.value, 0);
+  const totalDeductions = incomeTax + statutory + extrasTotal;
   return {
     gross: gross,
-    deductions: deductions,
-    net: gross - deductions,
-    rate: profile.combinedRate,
+    incomeTax: incomeTax,
+    statutory: statutory,
+    statutoryLabel: profile.statutoryLabel,
+    extras: extras,
+    extrasTotal: extrasTotal,
+    deductions: totalDeductions,
+    net: gross - totalDeductions,
     label: profile.label
   };
 }
 
 // Expected gross pay for shifts falling within [start, end] inclusive,
 // based on logged hours x your set hourly rate. Also returns expected net
-// pay after applying your selected tax location's estimated deduction rate.
+// pay after applying your selected tax location's estimated deductions
+// (income tax, CPP/EI or FICA, and any extra deductions like pension or meals).
 function expectedPayForPeriod(start, end){
   const rate = Number(data.hourlyRate || 0);
   const shifts = (data.shifts || []).filter(s => s.date >= start && s.date <= end);
   const totalHours = shifts.reduce((sum, s) => sum + Number(s.hours || 0), 0);
   const gross = totalHours * rate;
-  const deductionInfo = applyDeductions(gross);
+  const deductionInfo = applyDeductions(gross, shifts.length);
   return {
     expectedGross: gross,
     expectedNet: deductionInfo.net,
+    incomeTax: deductionInfo.incomeTax,
+    statutory: deductionInfo.statutory,
+    statutoryLabel: deductionInfo.statutoryLabel,
+    extras: deductionInfo.extras,
+    extrasTotal: deductionInfo.extrasTotal,
     deductions: deductionInfo.deductions,
-    taxRate: deductionInfo.rate,
     taxLabel: deductionInfo.label,
     totalHours,
     shiftCount: shifts.length
@@ -196,6 +226,11 @@ function comparePaystub(paystub){
   return {
     expectedGross: calc.expectedGross,
     expectedNet: calc.expectedNet,
+    incomeTax: calc.incomeTax,
+    statutory: calc.statutory,
+    statutoryLabel: calc.statutoryLabel,
+    extras: calc.extras,
+    extrasTotal: calc.extrasTotal,
     deductions: calc.deductions,
     taxLabel: calc.taxLabel,
     actual: Number(paystub.actualPay),
@@ -400,16 +435,15 @@ function renderShiftsList(){
   }
   const sorted = [...shifts].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
   const rate = Number(data.hourlyRate || 0);
-  const profile = getTaxProfile();
   sorted.slice(0,15).forEach(shift => {
     const li = document.createElement('li');
     li.className = 'history-item';
     const gross = Number(shift.hours||0) * rate;
-    const net = gross * (1 - profile.combinedRate);
+    const deductionInfo = applyDeductions(gross, 1);
     let payLabel = '';
     if(rate > 0){
-      payLabel = profile.combinedRate > 0
-        ? ` · $${fmt(gross)} gross / $${fmt(net)} net`
+      payLabel = deductionInfo.deductions > 0
+        ? ` · $${fmt(gross)} gross / $${fmt(deductionInfo.net)} net`
         : ` · $${fmt(gross)}`;
     }
     li.innerHTML = `
@@ -457,8 +491,12 @@ function renderPaystubsList(){
       diffClass = 'pos';
     }
     const periodLabel = `${new Date(stub.periodStart+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}–${new Date(stub.periodEnd+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
-    const expectedLine = result.deductions > 0
-      ? `${result.totalHours}h logged · expected net $${fmt(result.expectedNet)} (gross $${fmt(result.expectedGross)} − ${result.taxLabel} est. $${fmt(result.deductions)})`
+    let breakdownParts = [];
+    if(result.incomeTax > 0) breakdownParts.push(`${result.taxLabel} tax $${fmt(result.incomeTax)}`);
+    if(result.statutory > 0) breakdownParts.push(`${result.statutoryLabel} $${fmt(result.statutory)}`);
+    (result.extras||[]).forEach(e => { if(e.value > 0) breakdownParts.push(`${e.label} $${fmt(e.value)}`); });
+    const expectedLine = breakdownParts.length > 0
+      ? `${result.totalHours}h logged · expected net $${fmt(result.expectedNet)} (gross $${fmt(result.expectedGross)} − ${breakdownParts.join(', ')})`
       : `${result.totalHours}h logged, expected $${fmt(result.expectedNet)}`;
     li.innerHTML = `
       <div class="history-left">
@@ -474,6 +512,39 @@ function renderPaystubsList(){
     btn.addEventListener('click', () => {
       data.paystubs = (data.paystubs||[]).filter(s => s.id !== btn.dataset.removeStub);
       saveData();
+      renderPaystubsList();
+    });
+  });
+}
+
+function renderDeductionsList(){
+  const el = document.getElementById('deductions-list');
+  if(!el) return;
+  el.innerHTML = '';
+  const list = data.extraDeductions || [];
+  if(list.length === 0){
+    el.innerHTML = '<li class="bills-empty">No other deductions added yet.</li>';
+    return;
+  }
+  list.forEach(d => {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    const amountLabel = d.type === 'percent' ? `${d.amount}% of gross` : `$${fmt(d.amount)} per shift`;
+    li.innerHTML = `
+      <div class="history-left">
+        <span class="history-note">${d.label}</span>
+        <span class="history-date">${amountLabel}</span>
+      </div>
+      <button class="icon-btn" data-remove-deduction="${d.id}" style="font-size:16px;margin-left:6px;">✕</button>
+    `;
+    el.appendChild(li);
+  });
+  el.querySelectorAll('[data-remove-deduction]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      data.extraDeductions = (data.extraDeductions||[]).filter(d => d.id !== btn.dataset.removeDeduction);
+      saveData();
+      renderDeductionsList();
+      renderShiftsList();
       renderPaystubsList();
     });
   });
@@ -570,6 +641,12 @@ document.getElementById('btn-add-paystub').addEventListener('click', () => {
   document.getElementById('paystub-amount').value = '';
   openModal('modal-add-paystub');
 });
+document.getElementById('btn-add-deduction').addEventListener('click', () => {
+  document.getElementById('deduction-label').value = '';
+  document.getElementById('deduction-type').value = 'percent';
+  document.getElementById('deduction-amount').value = '';
+  openModal('modal-add-deduction');
+});
 
 document.getElementById('confirm-spend').addEventListener('click', () => {
   const amount = parseFloat(document.getElementById('spend-amount').value);
@@ -641,6 +718,20 @@ document.getElementById('confirm-paystub').addEventListener('click', () => {
   closeModal();
 });
 
+document.getElementById('confirm-deduction').addEventListener('click', () => {
+  const label = document.getElementById('deduction-label').value.trim();
+  const type = document.getElementById('deduction-type').value;
+  const amount = parseFloat(document.getElementById('deduction-amount').value);
+  if(!label || !amount || amount <= 0) return;
+  data.extraDeductions = data.extraDeductions || [];
+  data.extraDeductions.push({id: uid(), label, type, amount});
+  saveData();
+  renderDeductionsList();
+  renderShiftsList();
+  renderPaystubsList();
+  closeModal();
+});
+
 // ===== SETUP / BILLS SCREEN =====
 function fillSetupForm(){
   document.getElementById('input-balance').value = data.balance || '';
@@ -664,15 +755,24 @@ function fillPayScreen(){
   document.getElementById('input-tax-location').value = data.taxLocation || 'none';
   renderShiftsList();
   renderPaystubsList();
+  renderDeductionsList();
 }
 document.querySelector('[data-screen="screen-pay"]').addEventListener('click', fillPayScreen);
 
 document.getElementById('btn-save-rate').addEventListener('click', () => {
-  data.hourlyRate = parseFloat(document.getElementById('input-hourly-rate').value) || 0;
-  data.taxLocation = document.getElementById('input-tax-location').value || 'none';
-  saveData();
-  renderShiftsList();
-  renderPaystubsList();
+  try{
+    data.hourlyRate = parseFloat(document.getElementById('input-hourly-rate').value) || 0;
+    data.taxLocation = document.getElementById('input-tax-location').value || 'none';
+    saveData();
+    renderShiftsList();
+    renderPaystubsList();
+    const btn = document.getElementById('btn-save-rate');
+    const original = btn.textContent;
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  }catch(err){
+    alert('Could not save: ' + err.message);
+  }
 });
 
 // ===== ASK SCREEN =====
