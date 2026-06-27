@@ -409,6 +409,10 @@ input, select{
 .paid-item .history-note{
   text-decoration: line-through;
 }
+.cc-bill-item{
+  border-left: 3px solid var(--orange);
+  border-radius: 0 12px 12px 0;
+}
 .history-left{ display: flex; flex-direction: column; gap: 2px; }
 .history-note{ font-size: 14px; color: var(--text); font-weight: 500; }
 .history-date{ font-size: 11px; color: var(--text-faint); }

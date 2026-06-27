@@ -16,7 +16,7 @@ function loadData(){
     bills: [],      // {id, name, amount, date}
     debts: [],       // {id, person, amount, note, date}
     tips: [],        // {id, amount, date}
-    spends: [],      // {id, amount, note, date}
+    spends: [],      // {id, amount, note, category, emoji, label, date, settled}
     shifts: [],      // {id, date, hours}
     paystubs: []     // {id, periodStart, periodEnd, actualPay, date}
   };
@@ -69,12 +69,49 @@ function tipStats(){
   return {avg, count: amounts.length, consistency};
 }
 
-// Bills due before next payday
+// ===== CREDIT CARD BILL (auto-tracks logged spends) =====
+const CREDIT_CARD_BILL_ID = 'credit-card-bill-permanent';
+
+function totalUnsettledSpends(){
+  return (data.spends || []).filter(s => !s.settled).reduce((s,sp)=> s + Number(sp.amount||0), 0);
+}
+
+// Makes sure the permanent "Credit card bill" exists exactly once, and keeps
+// its amount synced to whatever you've spent that hasn't been settled yet.
+// This runs before any calculation or render that touches bills.
+function syncCreditCardBill(){
+  data.bills = data.bills || [];
+  let ccBill = data.bills.find(b => b.id === CREDIT_CARD_BILL_ID);
+  if(!ccBill){
+    ccBill = {
+      id: CREDIT_CARD_BILL_ID,
+      name: 'Credit card bill',
+      amount: 0,
+      date: null,
+      paid: false,
+      autoTracksSpends: true
+    };
+    data.bills.unshift(ccBill);
+  }
+  const unsettledTotal = totalUnsettledSpends();
+  // If new spending has happened since the bill was paid off, it owes again -
+  // reopen it automatically so new spends always count toward "owed" without
+  // needing you to remember to manually un-tick it.
+  if(ccBill.paid && unsettledTotal > 0){
+    ccBill.paid = false;
+  }
+  ccBill.amount = unsettledTotal;
+}
+
+// Bills due before next payday - bills with no date set (including the
+// credit card bill by default) are treated as already owed right now,
+// since they represent money already spent, not a future due date.
 function billsBeforePayday(){
+  syncCreditCardBill();
   const unpaid = (data.bills || []).filter(b => !b.paid);
   if(!data.nextPayDate) return unpaid.reduce((s,b)=>s+Number(b.amount||0),0);
   return unpaid
-    .filter(b => b.date && b.date <= data.nextPayDate)
+    .filter(b => !b.date || b.date <= data.nextPayDate)
     .reduce((s,b)=> s + Number(b.amount||0), 0);
 }
 
@@ -489,6 +526,7 @@ function renderHistory(){
           <span class="history-date">${new Date(item.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}${judgmentTag}</span>
         </div>
         <span class="history-amount mono ${isSpend?'neg':'pos'}">${isSpend?'−':'+'}$${fmt(item.amount)}</span>
+        <button class="icon-btn" data-remove-activity="${item.id}" data-activity-type="${item.type}" style="font-size:16px;margin-left:2px;">✕</button>
       `;
       target.appendChild(li);
     });
@@ -496,27 +534,52 @@ function renderHistory(){
 
   renderInto(el, list.slice(0,6));
   renderInto(elFull, list);
+
+  document.querySelectorAll('[data-remove-activity]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.removeActivity;
+      const type = btn.dataset.activityType;
+      if(type === 'spend'){
+        data.spends = data.spends.filter(s => s.id !== id);
+      } else if(type === 'tip'){
+        data.tips = data.tips.filter(t => t.id !== id);
+      }
+      saveData();
+      render();
+    });
+  });
 }
 
 function renderBillsList(){
   const el = document.getElementById('bills-list');
+  syncCreditCardBill();
   el.innerHTML = '';
   if(data.bills.length === 0){
     el.innerHTML = '<li class="bills-empty">No bills added yet.</li>';
     return;
   }
-  const sorted = [...data.bills].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  // Credit card bill always shows first, regardless of date sorting.
+  const ccBill = data.bills.find(b => b.id === CREDIT_CARD_BILL_ID);
+  const others = data.bills.filter(b => b.id !== CREDIT_CARD_BILL_ID)
+    .sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  const sorted = ccBill ? [ccBill, ...others] : others;
+
   sorted.forEach(bill => {
     const li = document.createElement('li');
-    li.className = 'history-item' + (bill.paid ? ' paid-item' : '');
+    const isCC = bill.id === CREDIT_CARD_BILL_ID;
+    li.className = 'history-item' + (bill.paid ? ' paid-item' : '') + (isCC ? ' cc-bill-item' : '');
+    const dateLabel = isCC
+      ? (bill.amount > 0 ? 'From logged spends' : 'Nothing logged yet')
+      : (bill.date ? new Date(bill.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No date');
+    const deleteBtn = isCC ? '' : `<button class="icon-btn" data-remove-bill="${bill.id}" style="font-size:16px;margin-left:6px;">✕</button>`;
     li.innerHTML = `
       <button class="paid-check ${bill.paid ? 'checked' : ''}" data-toggle-paid-bill="${bill.id}" aria-label="Mark paid">${bill.paid ? '✓' : ''}</button>
       <div class="history-left">
-        <span class="history-note">${bill.name}</span>
-        <span class="history-date">${bill.date ? new Date(bill.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No date'}</span>
+        <span class="history-note">${isCC ? '💳 ' : ''}${bill.name}</span>
+        <span class="history-date">${dateLabel}</span>
       </div>
       <span class="history-amount mono neg">$${fmt(bill.amount)}</span>
-      <button class="icon-btn" data-remove-bill="${bill.id}" style="font-size:16px;margin-left:6px;">✕</button>
+      ${deleteBtn}
     `;
     el.appendChild(li);
   });
@@ -531,7 +594,20 @@ function renderBillsList(){
   el.querySelectorAll('[data-toggle-paid-bill]').forEach(btn => {
     btn.addEventListener('click', () => {
       const bill = data.bills.find(b => b.id === btn.dataset.togglePaidBill);
-      if(bill) bill.paid = !bill.paid;
+      if(!bill) return;
+      if(bill.id === CREDIT_CARD_BILL_ID){
+        // Paying off the card settles every spend that built up this balance,
+        // so next cycle starts fresh instead of double-counting them forever.
+        if(!bill.paid){
+          (data.spends || []).forEach(s => { if(!s.settled) s.settled = true; });
+          bill.amount = 0;
+        }
+        // Toggling back to unpaid just re-opens the bill; it'll recalculate
+        // from any new unsettled spends logged from here on.
+        bill.paid = !bill.paid;
+      } else {
+        bill.paid = !bill.paid;
+      }
       saveData();
       renderBillsList();
       render();
