@@ -260,6 +260,11 @@ input, select{
 .till-label{ color: var(--text-dim); }
 .till-value{ color: var(--text); font-size: 14px; font-weight: 600; }
 .till-row-note{ padding-top: 4px; }
+.till-row-strong .till-label{ color: var(--text); font-weight: 700; }
+.till-row-strong .till-value{ color: var(--pink); font-weight: 700; }
+.till-row-sub{ padding: 4px 0; }
+.till-row-sub .till-label{ font-size: 12.5px; color: var(--text-faint); }
+.till-row-sub .till-value{ font-size: 12.5px; color: var(--text-faint); font-weight: 500; }
 .buffer-explainer{
   font-size: 12px;
   color: var(--text-faint);
@@ -379,10 +384,47 @@ input, select{
   border: 1px solid var(--border-soft);
   border-radius: 12px;
   margin-bottom: 8px;
+  gap: 10px;
+}
+.paid-check{
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+.paid-check.checked{
+  background: var(--good);
+  border-color: var(--good);
+}
+.paid-item{
+  opacity: 0.55;
+}
+.paid-item .history-note{
+  text-decoration: line-through;
 }
 .history-left{ display: flex; flex-direction: column; gap: 2px; }
 .history-note{ font-size: 14px; color: var(--text); font-weight: 500; }
 .history-date{ font-size: 11px; color: var(--text-faint); }
+.judgment-tag{
+  display: inline-block;
+  margin-left: 7px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+.judgment-good{ background: rgba(31,174,122,0.12); color: var(--good); }
+.judgment-bad{ background: rgba(246,196,69,0.18); color: #9C7A0E; }
+.judgment-stupid{ background: rgba(255,61,129,0.14); color: var(--pink); }
 .history-amount{ font-size: 14px; font-weight: 700; }
 .history-amount.neg{ color: var(--bad); }
 .history-amount.pos{ color: var(--good); }
@@ -618,11 +660,69 @@ input, select{
   margin-bottom: 16px;
   color: var(--text);
 }
+.modal-tall{
+  max-height: 86vh;
+  overflow-y: auto;
+}
 .modal-hint{
   font-size: 12px;
   color: var(--text-faint);
   margin-top: 6px;
   line-height: 1.4;
+}
+.calendar-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.calendar-month-label{
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.calendar-weekdays{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+.calendar-grid{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.calendar-day{
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1.5px solid var(--border-soft);
+}
+.calendar-day.empty{
+  visibility: hidden;
+}
+.calendar-day.has-shift{
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.calendar-day.selected{
+  background: var(--neon-gradient);
+  color: #FFFFFF;
+  border-color: transparent;
+}
+.calendar-day.today{
+  box-shadow: 0 0 0 1.5px var(--orange);
 }
 .category-chip-row{
   display: flex;

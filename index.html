@@ -62,12 +62,16 @@
         <span class="till-label">Bank balance</span>
         <span id="till-balance" class="till-value mono">$0.00</span>
       </div>
-      <div class="till-row">
-        <span class="till-label">Set aside for bills</span>
+      <div class="till-row till-row-strong">
+        <span class="till-label">Total owed</span>
+        <span id="till-total-owed" class="till-value mono">$0.00</span>
+      </div>
+      <div class="till-row till-row-sub">
+        <span class="till-label">— Bills (unpaid)</span>
         <span id="till-bills" class="till-value mono">$0.00</span>
       </div>
-      <div class="till-row">
-        <span class="till-label">Owed to people</span>
+      <div class="till-row till-row-sub">
+        <span class="till-label">— Owed to people</span>
         <span id="till-debts" class="till-value mono">$0.00</span>
       </div>
       <div class="till-row">
@@ -140,6 +144,7 @@
         <span class="input-prefix">$</span>
         <input type="number" id="input-balance" class="field-input" inputmode="decimal" placeholder="0.00" step="0.01">
       </div>
+      <p class="section-hint">Update this whenever you check your real chequing balance. Spends and tips you log don't change this number automatically — bills and debts get subtracted separately as "Total owed".</p>
 
       <label class="field-label" for="input-next-pay-date">Next paycheck date</label>
       <input type="date" id="input-next-pay-date" class="field-input">
@@ -390,15 +395,23 @@
       </div>
     </div>
 
-    <div id="modal-add-shift" class="modal">
-      <h3 class="modal-title">Log a shift</h3>
-      <label class="field-label" for="shift-date">Date</label>
-      <input type="date" id="shift-date" class="field-input">
-      <label class="field-label" for="shift-hours">Hours worked</label>
-      <input type="number" id="shift-hours" class="field-input" inputmode="decimal" placeholder="0" step="0.25">
+    <div id="modal-add-shift" class="modal modal-tall">
+      <h3 class="modal-title">Log shifts</h3>
+      <div class="calendar-header">
+        <button type="button" id="cal-prev-month" class="icon-btn" aria-label="Previous month">‹</button>
+        <span id="cal-month-label" class="calendar-month-label"></span>
+        <button type="button" id="cal-next-month" class="icon-btn" aria-label="Next month">›</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+      <p class="modal-hint" id="cal-selection-summary">No days selected yet.</p>
+      <label class="field-label" for="shift-hours">Hours per selected day</label>
+      <input type="number" id="shift-hours" class="field-input" inputmode="decimal" placeholder="e.g. 8" step="0.25">
       <div class="modal-actions">
         <button class="modal-btn modal-cancel" data-close>Cancel</button>
-        <button class="modal-btn modal-confirm" id="confirm-shift">Log shift</button>
+        <button class="modal-btn modal-confirm" id="confirm-shift">Log shifts</button>
       </div>
     </div>
 

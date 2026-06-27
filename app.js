@@ -71,8 +71,9 @@ function tipStats(){
 
 // Bills due before next payday
 function billsBeforePayday(){
-  if(!data.nextPayDate) return data.bills.reduce((s,b)=>s+Number(b.amount||0),0);
-  return data.bills
+  const unpaid = (data.bills || []).filter(b => !b.paid);
+  if(!data.nextPayDate) return unpaid.reduce((s,b)=>s+Number(b.amount||0),0);
+  return unpaid
     .filter(b => b.date && b.date <= data.nextPayDate)
     .reduce((s,b)=> s + Number(b.amount||0), 0);
 }
@@ -123,7 +124,7 @@ function calcDaysToPayday(){
 // Total money owed to other people (no due-date weighting — treated as
 // already-spoken-for money, same as a bill, since it's not really yours to spend)
 function totalDebtsOwed(){
-  return (data.debts || []).reduce((s,d)=> s + Number(d.amount||0), 0);
+  return (data.debts || []).filter(d => !d.paid).reduce((s,d)=> s + Number(d.amount||0), 0);
 }
 
 // ===== TAX ESTIMATION =====
@@ -263,6 +264,30 @@ function calcSafeToSpend(){
   };
 }
 
+// ===== AUTO-LABELING: good / bad / stupid =====
+// Rules, in priority order:
+// 1. Gambling is always "stupid" - no amount threshold needed.
+// 2. A single spend eating >=50% of today's safe-to-spend is "stupid" -
+//    one purchase shouldn't be able to wipe out half a day's room.
+// 3. A spend >=25% of today's number, OR a second+ spend in the same
+//    category on the same day (impulse/repeat pattern), is "bad".
+// 4. Everything else is "good" - comfortably within budget.
+function autoLabelSpend(amount, category){
+  if(category === 'gambling') return 'stupid';
+
+  const calc = calcSafeToSpend();
+  const dailyAmount = Math.max(calc.perDay, 1); // avoid divide-by-zero/negative weirdness
+  const fraction = amount / dailyAmount;
+
+  if(fraction >= 0.5) return 'stupid';
+
+  const today = todayISO();
+  const sameCategoryToday = (data.spends || []).filter(s => s.date === today && s.category === category).length;
+  if(fraction >= 0.25 || sameCategoryToday >= 1) return 'bad';
+
+  return 'good';
+}
+
 // ===== RENDER =====
 let lastRenderedPerDay = null;
 
@@ -313,6 +338,7 @@ function render(){
 
   // Till summary
   document.getElementById('till-balance').textContent = '$' + fmt(data.balance);
+  document.getElementById('till-total-owed').textContent = '$' + fmt(calc.billsOwed + calc.debtsOwed);
   document.getElementById('till-bills').textContent = '$' + fmt(calc.billsOwed);
   document.getElementById('till-debts').textContent = '$' + fmt(calc.debtsOwed);
   document.getElementById('till-buffer').textContent = '$' + fmt(calc.buffer);
@@ -456,10 +482,11 @@ function renderHistory(){
       const isSpend = item.type === 'spend';
       const emojiPrefix = (isSpend && item.emoji) ? item.emoji + ' ' : '';
       const label = isSpend ? (item.note || (item.category ? item.category[0].toUpperCase() + item.category.slice(1) : 'Spend')) : 'Tips logged';
+      const judgmentTag = (isSpend && item.label) ? `<span class="judgment-tag judgment-${item.label}">${item.label}</span>` : '';
       li.innerHTML = `
         <div class="history-left">
           <span class="history-note">${emojiPrefix}${label}</span>
-          <span class="history-date">${new Date(item.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          <span class="history-date">${new Date(item.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}${judgmentTag}</span>
         </div>
         <span class="history-amount mono ${isSpend?'neg':'pos'}">${isSpend?'−':'+'}$${fmt(item.amount)}</span>
       `;
@@ -481,8 +508,9 @@ function renderBillsList(){
   const sorted = [...data.bills].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
   sorted.forEach(bill => {
     const li = document.createElement('li');
-    li.className = 'history-item';
+    li.className = 'history-item' + (bill.paid ? ' paid-item' : '');
     li.innerHTML = `
+      <button class="paid-check ${bill.paid ? 'checked' : ''}" data-toggle-paid-bill="${bill.id}" aria-label="Mark paid">${bill.paid ? '✓' : ''}</button>
       <div class="history-left">
         <span class="history-note">${bill.name}</span>
         <span class="history-date">${bill.date ? new Date(bill.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No date'}</span>
@@ -495,6 +523,15 @@ function renderBillsList(){
   el.querySelectorAll('[data-remove-bill]').forEach(btn => {
     btn.addEventListener('click', () => {
       data.bills = data.bills.filter(b => b.id !== btn.dataset.removeBill);
+      saveData();
+      renderBillsList();
+      render();
+    });
+  });
+  el.querySelectorAll('[data-toggle-paid-bill]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bill = data.bills.find(b => b.id === btn.dataset.togglePaidBill);
+      if(bill) bill.paid = !bill.paid;
       saveData();
       renderBillsList();
       render();
@@ -514,8 +551,9 @@ function renderDebtsList(){
   const sorted = [...debts].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
   sorted.forEach(debt => {
     const li = document.createElement('li');
-    li.className = 'history-item';
+    li.className = 'history-item' + (debt.paid ? ' paid-item' : '');
     li.innerHTML = `
+      <button class="paid-check ${debt.paid ? 'checked' : ''}" data-toggle-paid-debt="${debt.id}" aria-label="Mark paid">${debt.paid ? '✓' : ''}</button>
       <div class="history-left">
         <span class="history-note">${debt.person}${debt.note ? ' — ' + debt.note : ''}</span>
         <span class="history-date">${debt.date ? new Date(debt.date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No date'}</span>
@@ -528,6 +566,15 @@ function renderDebtsList(){
   el.querySelectorAll('[data-remove-debt]').forEach(btn => {
     btn.addEventListener('click', () => {
       data.debts = (data.debts||[]).filter(d => d.id !== btn.dataset.removeDebt);
+      saveData();
+      renderDebtsList();
+      render();
+    });
+  });
+  el.querySelectorAll('[data-toggle-paid-debt]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const debt = data.debts.find(d => d.id === btn.dataset.togglePaidDebt);
+      if(debt) debt.paid = !debt.paid;
       saveData();
       renderDebtsList();
       render();
@@ -743,9 +790,75 @@ document.getElementById('btn-add-debt').addEventListener('click', () => {
   document.getElementById('debt-date').value = '';
   openModal('modal-add-debt');
 });
+// ===== SHIFT CALENDAR (multi-select) =====
+let calendarViewDate = new Date();
+let selectedShiftDates = [];
+
+function renderCalendar(){
+  const year = calendarViewDate.getFullYear();
+  const month = calendarViewDate.getMonth();
+  const monthLabel = calendarViewDate.toLocaleDateString('en-US', {month:'long', year:'numeric'});
+  document.getElementById('cal-month-label').textContent = monthLabel;
+
+  const firstDay = new Date(year, month, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = todayISO();
+  const shiftDates = new Set((data.shifts || []).map(s => s.date));
+
+  const grid = document.getElementById('calendar-grid');
+  grid.innerHTML = '';
+
+  for(let i = 0; i < startWeekday; i++){
+    const empty = document.createElement('div');
+    empty.className = 'calendar-day empty';
+    grid.appendChild(empty);
+  }
+
+  for(let d = 1; d <= daysInMonth; d++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'calendar-day';
+    if(dateStr === today) btn.classList.add('today');
+    if(shiftDates.has(dateStr)) btn.classList.add('has-shift');
+    if(selectedShiftDates.includes(dateStr)) btn.classList.add('selected');
+    btn.textContent = d;
+    btn.dataset.date = dateStr;
+    btn.addEventListener('click', () => {
+      const idx = selectedShiftDates.indexOf(dateStr);
+      if(idx >= 0){
+        selectedShiftDates.splice(idx, 1);
+      } else {
+        selectedShiftDates.push(dateStr);
+      }
+      renderCalendar();
+    });
+    grid.appendChild(btn);
+  }
+
+  const summaryEl = document.getElementById('cal-selection-summary');
+  if(selectedShiftDates.length === 0){
+    summaryEl.textContent = 'Tap days to select them, then enter hours below.';
+  } else {
+    summaryEl.textContent = `${selectedShiftDates.length} day${selectedShiftDates.length===1?'':'s'} selected.`;
+  }
+}
+
+document.getElementById('cal-prev-month').addEventListener('click', () => {
+  calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1);
+  renderCalendar();
+});
+document.getElementById('cal-next-month').addEventListener('click', () => {
+  calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1);
+  renderCalendar();
+});
+
 document.getElementById('btn-add-shift').addEventListener('click', () => {
-  document.getElementById('shift-date').value = todayISO();
+  calendarViewDate = new Date();
+  selectedShiftDates = [];
   document.getElementById('shift-hours').value = '';
+  renderCalendar();
   openModal('modal-add-shift');
 });
 document.getElementById('btn-add-paystub').addEventListener('click', () => {
@@ -781,8 +894,8 @@ document.getElementById('confirm-spend').addEventListener('click', () => {
   const category = document.getElementById('spend-category').value;
   const selectedChip = document.querySelector('#spend-category-row .category-chip.selected');
   const emoji = selectedChip ? selectedChip.dataset.emoji : '';
-  data.spends.push({id: uid(), amount, note, category, emoji, date: todayISO()});
-  data.balance -= amount;
+  const label = autoLabelSpend(amount, category);
+  data.spends.push({id: uid(), amount, note, category, emoji, label, date: todayISO()});
   saveData();
   render();
   closeModal();
@@ -792,7 +905,6 @@ document.getElementById('confirm-tips').addEventListener('click', () => {
   const amount = parseFloat(document.getElementById('tips-amount').value);
   if(!amount || amount <= 0) return;
   data.tips.push({id: uid(), amount, date: todayISO()});
-  data.balance += amount;
   saveData();
   render();
   closeModal();
@@ -825,11 +937,18 @@ document.getElementById('confirm-debt').addEventListener('click', () => {
 });
 
 document.getElementById('confirm-shift').addEventListener('click', () => {
-  const date = document.getElementById('shift-date').value || todayISO();
   const hours = parseFloat(document.getElementById('shift-hours').value);
-  if(!hours || hours <= 0) return;
+  if(!hours || hours <= 0 || selectedShiftDates.length === 0) return;
   data.shifts = data.shifts || [];
-  data.shifts.push({id: uid(), date, hours});
+  selectedShiftDates.forEach(date => {
+    // Avoid duplicate entries if a day already has a logged shift - update it instead
+    const existing = data.shifts.find(s => s.date === date);
+    if(existing){
+      existing.hours = hours;
+    } else {
+      data.shifts.push({id: uid(), date, hours});
+    }
+  });
   saveData();
   renderShiftsList();
   closeModal();
